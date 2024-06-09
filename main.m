@@ -438,6 +438,79 @@ void detect_jailbreak_port()
     }
 }
 
+#include <xpc/xpc.h>
+#include <xpc_private.h>
+
+struct _os_alloc_once_s {
+    long once;
+    void *ptr;
+};
+
+struct xpc_global_data {
+    uint64_t    a;
+    uint64_t    xpc_flags;
+    mach_port_t    task_bootstrap_port;  /* 0x10 */
+#ifndef _64
+    uint32_t    padding;
+#endif
+    xpc_object_t    xpc_bootstrap_pipe;   /* 0x18 */
+};
+
+extern struct _os_alloc_once_s _os_alloc_once_table[];
+extern void* _os_alloc_once(struct _os_alloc_once_s *slot, size_t sz, os_function_t init);
+
+#define JBS_DOMAIN_SYSTEMWIDE 1
+#define JBS_SYSTEMWIDE_GET_JBROOT 1
+
+void detect_launchd_jbserver()
+{
+    struct xpc_global_data* globalData = NULL;
+    if (_os_alloc_once_table[1].once == -1) {
+        globalData = _os_alloc_once_table[1].ptr;
+    }
+    else {
+        globalData = _os_alloc_once(&_os_alloc_once_table[1], 472, NULL);
+        if (!globalData) _os_alloc_once_table[1].once = -1;
+    }
+    if (!globalData) {
+        LOG("invalid globalData!\n");
+        return;
+    }
+    
+    if (!globalData->xpc_bootstrap_pipe) {
+        mach_port_t *initPorts;
+        mach_msg_type_number_t initPortsCount = 0;
+        if (mach_ports_lookup(mach_task_self(), &initPorts, &initPortsCount) == 0) {
+            globalData->task_bootstrap_port = initPorts[0];
+            globalData->xpc_bootstrap_pipe = xpc_pipe_create_from_port(globalData->task_bootstrap_port, 0);
+        }
+    }
+    if (!globalData->xpc_bootstrap_pipe) {
+        LOG("invalid xpc_bootstrap_pipe!\n");
+        return;
+    }
+    xpc_object_t xpipe = globalData->xpc_bootstrap_pipe;
+
+    xpc_object_t xdict = xpc_dictionary_create_empty();
+
+    xpc_dictionary_set_uint64(xdict, "jb-domain", JBS_DOMAIN_SYSTEMWIDE);
+    xpc_dictionary_set_uint64(xdict, "action", JBS_SYSTEMWIDE_GET_JBROOT);
+        
+    xpc_object_t xreply = NULL;
+
+    int err = xpc_pipe_routine_with_flags(xpipe, xdict, &xreply, 0);
+    LOG("xpc_pipe_routine_with_flags error=%d xreply=%p\n", err, xreply);
+
+    if (err != 0) {
+        return;
+    }
+    
+    if(xreply) {
+        const char *replyRootPath = xpc_dictionary_get_string(xreply, "root-path");
+        LOG("dopamine2 installed: %s\n", replyRootPath);
+    }
+}
+
 /* bypass all jb-bypass: FlyJB,Shadow,A-Bypass etc... */
 @interface NSObject(JBDetect15) + (void)initialize; @end
 @implementation NSObject(JBDetect15)
@@ -465,6 +538,7 @@ void detect_jailbreak_port()
         detect_fugu15Max();
         detect_jailbreak_sigs();
         detect_jailbreak_port();
+        detect_launchd_jbserver();
         
         // wait for NS Foundation to initialize.
         dispatch_async(dispatch_get_main_queue(), ^{
