@@ -284,7 +284,7 @@ void detect_jailbroken_apps()
     
     for(int i=0; i<sizeof(paths)/sizeof(paths[0]); i++) {
         for(int j=0; j<sizeof(appids)/sizeof(appids[0]); j++) {
-            char* mobile[PATH_MAX];
+            char mobile[PATH_MAX];
             snprintf(mobile,sizeof(mobile),"/var/mobile/%s/%s%s%s", paths[i][1], appids[j], paths[i][0], paths[i][2]);
             if(access(mobile, F_OK)==0) {
                 LOG("jailbroken app found %s\n", mobile);
