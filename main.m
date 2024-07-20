@@ -422,8 +422,8 @@ void detect_jailbreak_port()
 {
     char* ports[] = {
         "cy:com.saurik.substrated",
-        "cy:ws.hbang.common.preferencesservice",
-        "lh:ws.hbang.common.preferencesservice"
+        "cy:com.opa334.jailbreakd",
+        "lh:com.opa334.jailbreakd"
     };
     for(int i=0; i<sizeof(ports)/sizeof(ports[0]); i++) {
         mach_port_t port = MACH_PORT_NULL;
