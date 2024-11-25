@@ -511,6 +511,24 @@ void detect_launchd_jbserver()
     }
 }
 
+//works on ios14.0 ~ 15.1.1
+void detect_trollstpre_app()
+{
+    xpc_connection_t connection = xpc_connection_create_mach_service("com.apple.nehelper", nil, 2);
+    xpc_connection_set_event_handler(connection, ^(xpc_object_t object){});
+    xpc_connection_resume(connection);
+    xpc_object_t xdict = xpc_dictionary_create(nil, nil, 0);
+    xpc_dictionary_set_uint64(xdict, "delegate-class-id", 1);
+    xpc_dictionary_set_uint64(xdict, "cache-command", 3);
+    xpc_dictionary_set_string(xdict, "cache-signing-identifier", "com.opa334.TrollStore");
+    xpc_object_t reply = xpc_connection_send_message_with_reply_sync(connection, xdict);
+//    NSLog(@"reply=%s", xpc_copy_description(reply));
+    xpc_object_t resultData = xpc_dictionary_get_value(reply, "result-data");
+    if(xpc_dictionary_get_value(resultData, "cache-app-uuid") != nil) {
+        LOG("trollstore app installed!\n");
+    }
+}
+
 /* bypass all jb-bypass: FlyJB,Shadow,A-Bypass etc... */
 @interface NSObject(JBDetect15) + (void)initialize; @end
 @implementation NSObject(JBDetect15)
@@ -539,6 +557,7 @@ void detect_launchd_jbserver()
         detect_jailbreak_sigs();
         detect_jailbreak_port();
         detect_launchd_jbserver();
+        detect_trollstpre_app();
         
         // wait for NS Foundation to initialize.
         dispatch_async(dispatch_get_main_queue(), ^{
