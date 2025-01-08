@@ -222,17 +222,18 @@ void detect_exception_port()
     mach_port_t task = mach_task_self();
 
     task_get_exception_ports(task, EXC_MASK_ALL, masks, &count, ports, behaviors, flavors);
+    //default: mask=00001BFE port=00000000 behavior=00000000 flavor=00000000
+    //some jailbreaks set launchd exception port and subproces will auto inherit it
 
-    //LOG("got exception ports count=%d\n", count);
-
-    for (int i = 0;i < count; i++)
+    if(count != 1) {
+        LOG("exception record modified!");
+    }
+    
+    for (int i = 0; i<count; i++)
     {
-        //LOG("port[%d] mask=%08X port=%08X behavior=%08X flavor=%08X\n", i, masks[i], ports[i], behaviors[i], flavors[i]);
-        //default: port[0] mask=00001BFE port=00000000 behavior=00000000 flavor=00000000
-        //some jailbreak will set launchd exception port and subproces will auto inherit it.
-        //to restore it we can task_set_exception_ports(task, 0x00001BFE, MACH_PORT_NULL, 0, 0));
-        if((masks[i] & EXC_MASK_BAD_ACCESS) && ports[i]) {
-            LOG("unexept exception port %08X\n", ports[i]);
+        //NSLog(@"index[%d] mask=%08X port=%08X behavior=%08X flavor=%08X\n", i, masks[i], ports[i], behaviors[i], flavors[i]);
+        if(ports[i] || behaviors[i] || flavors[i]) {
+            LOG("unexept exception record [%d] mask=%08X port=%08X behavior=%08X flavor=%08X\n", i, masks[i], ports[i], behaviors[i], flavors[i]);
         }
     }
 }
@@ -529,6 +530,47 @@ void detect_trollstpre_app()
     }
 }
 
+
+#import <Security/Security.h>
+#import <LocalAuthentication/LocalAuthentication.h>
+void detect_passcode_status()
+{
+    {
+        LAContext *myContext = [[LAContext alloc] init];
+        
+        NSError *authError = nil;
+        if ([myContext canEvaluatePolicy:LAPolicyDeviceOwnerAuthentication error:&authError])
+        {
+//            LOG("LocalAuthentication: passcode has set\n");
+        }
+        else
+        {
+            LOG("LocalAuthentication: passcode has not set, %s\n", authError.localizedDescription.UTF8String);
+        }
+    }
+    
+    {
+        NSDictionary *attributes = @{
+            (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+            (__bridge id)kSecAttrService: @"LocalDeviceServices",
+            (__bridge id)kSecAttrAccount: @"NoAccount",
+            (__bridge id)kSecValueData: [@"Device has passcode set?" dataUsingEncoding:NSUTF8StringEncoding],
+            (__bridge id)kSecAttrAccessible: (__bridge id)kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly
+        };
+        
+        OSStatus status = SecItemAdd((__bridge CFDictionaryRef)attributes, NULL);
+        if (status == errSecSuccess) {
+            // item added okay, passcode has been set
+            
+            SecItemDelete((__bridge CFDictionaryRef)attributes);
+            
+//            LOG("SecurityFramework: passcode has set\n");
+        } else {
+            LOG("SecurityFramework: passcode has not set, %d\n", status);
+        }
+    }
+}
+
 /* bypass all jb-bypass: FlyJB,Shadow,A-Bypass etc... */
 @interface NSObject(JBDetect15) + (void)initialize; @end
 @implementation NSObject(JBDetect15)
@@ -561,6 +603,7 @@ void detect_trollstpre_app()
         
         // wait for NS Foundation to initialize.
         dispatch_async(dispatch_get_main_queue(), ^{
+            detect_passcode_status();
             detect_removed_varjb();
             detect_url_schemes();
             detect_jbapp_plugins();
