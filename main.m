@@ -569,6 +569,30 @@ void detect_passcode_status()
             LOG("SecurityFramework: passcode has not set, %d\n", status);
         }
     }
+    
+    {
+        CFErrorRef sacError = NULL;
+        SecAccessControlRef sacObject = SecAccessControlCreateWithFlags(kCFAllocatorDefault, kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly, kNilOptions, &sacError);
+        
+        NSDictionary *params = @{
+                                 (__bridge id)kSecAttrTokenID: (__bridge id)kSecAttrTokenIDSecureEnclave,
+                                 (__bridge id)kSecAttrKeyType: (__bridge id)kSecAttrKeyTypeEC,
+                                 (__bridge id)kSecAttrKeySizeInBits: @256,
+                                 (__bridge id)kSecPrivateKeyAttrs: @{
+                                         (__bridge id)kSecAttrAccessControl: (__bridge_transfer id)sacObject,
+                                         (__bridge id)kSecAttrIsPermanent: @YES,
+                                         (__bridge id)kSecAttrLabel: @"TestKey",
+                                         },
+                                 };
+        
+        CFErrorRef error=nil;
+        SecKeyRef SEKey = SecKeyCreateRandomKey((__bridge CFDictionaryRef)params, &error);
+        if (SEKey) {
+//            LOG("SecureEnclave: passcode has set\n");
+        } else {
+            LOG("SecureEnclave: passcode has not set, %s\n", ((__bridge NSError*)error).localizedDescription.UTF8String);
+        }
+    }
 }
 
 /* bypass all jb-bypass: FlyJB,Shadow,A-Bypass etc... */
