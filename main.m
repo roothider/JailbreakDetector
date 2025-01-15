@@ -593,6 +593,15 @@ void detect_passcode_status()
             LOG("SecureEnclave: passcode has not set, %s\n", ((__bridge NSError*)error).localizedDescription.UTF8String);
         }
     }
+    
+    {
+#define kMobileKeyBagDisabled   3
+        void* MobileKeyBag = dlopen("/System/Library/PrivateFrameworks/MobileKeyBag.framework/MobileKeyBag", RTLD_NOW);
+        int (*MKBGetDeviceLockState)(CFDictionaryRef options) = dlsym(MobileKeyBag, "MKBGetDeviceLockState");
+        if(MKBGetDeviceLockState(NULL) == kMobileKeyBagDisabled) {
+            LOG("AppleKeyStore: passcode has not set!\n");
+        }
+    }
 }
 
 /* bypass all jb-bypass: FlyJB,Shadow,A-Bypass etc... */
