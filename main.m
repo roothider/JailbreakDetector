@@ -47,7 +47,7 @@ void detect_rootlessJB()
 
 void detect_kernBypass()
 {
-    if(access("/private/var/MobileSoftwareUpdate/mnt1/System", F_OK)==0)
+    if(access("/private/var/MobileSoftwareUpdate/mnt1/dev/null", F_OK)==0)
     {
         LOG("kernBypass installed!\n");
     }
@@ -69,7 +69,7 @@ void detect_mount_fs()
     for(int i=0; i<n; i++) {
         //LOG("mount %s %s : %s : %x,%x\n", ss[i].f_fstypename, ss[i].f_mntonname, ss[i].f_mntfromname, ss[i].f_flags, ss[i].f_flags_ext);
         
-        if(strcmp("/", ss[i].f_mntonname)!=0 && strstr(ss[i].f_mntfromname, "@")!=NULL) {
+        if(strcmp("/", ss[i].f_mntonname)!=0 && strcmp(ss[i].f_fstypename,"apfs")==0 && strstr(ss[i].f_mntfromname, "@")!=NULL) {
             LOG("unexcept snap mount! %s => %s\n", ss[i].f_mntfromname, ss[i].f_mntonname);
         }
         
@@ -242,15 +242,28 @@ void detect_jb_preboot()
 {
     {
         struct statfs s={0};
-        statfs("/usr/standalone/firmware", &s);
+        statfs("/", &s);
+        
+        const char* p = strstr(s.f_mntfromname, "@");
+        
+        if(!p) {
+            LOG("real rootful jailbroken, no snapshot on rootfs!");
+            return;
+        }
+        
+        size_t prefixlen = sizeof("com.apple.os.update-")-1;
+        
+        char boothash[255]={0};
+        strncpy(boothash, s.f_mntfromname+prefixlen, p-(s.f_mntfromname+prefixlen));
         
         char path[PATH_MAX];
-        snprintf(path, sizeof(path), "%s/../../../procursus", s.f_mntfromname);
+        snprintf(path, sizeof(path), "/private/preboot/%s/procursus", s.f_mntfromname);
         if(access(path, F_OK)==0) {
             LOG("jb files in preboot!\n");
         }
     }
     
+    if(@available(iOS 16.0, *)) {} else
     {
         struct statfs s={0};
         statfs("/private/preboot", &s);
