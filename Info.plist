@@ -7,6 +7,10 @@
 		<string>sileo</string>
 		<string>zbra</string>
 		<string>filza</string>
+		<string>cydia</string>
+		<string>installer</string>
+		<string>apt-repo</string>
+		<string>test</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
