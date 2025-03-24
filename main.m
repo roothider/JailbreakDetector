@@ -625,6 +625,21 @@ void detect_cfprefsd_hook()
         "/basebin/LaunchDaemons/com.opa334.Dopamine.startup",
         "/basebin/LaunchDaemons/com.opa334.jailbreakd",
         "/basebin/LaunchDaemons/jailbreakd",
+        
+        "/Library/LaunchDaemons/us.diatr.shshd",
+        "/Library/LaunchDaemons/com.apple.atrun",
+        "/Library/LaunchDaemons/com.opa334.sandyd",
+        "/Library/LaunchDaemons/com.openssh.sshd",
+        "/Library/LaunchDaemons/com.tigisoftware.filza.helper",
+        
+        "/var/mobile/Library/Preferences/com.opa334.choicyprefs",
+        "/var/mobile/Library/Preferences/com.opa334.craneprefs",
+        "/var/mobile/Library/Preferences/com.spark.snowboardprefs",
+        "/var/mobile/Library/Preferences/com.tigisoftware.Filza",
+        "/var/mobile/Library/Preferences/org.coolstar.SileoStore",
+        "/var/mobile/Library/Preferences/ru.domo.cocoatop64",
+        "/var/mobile/Library/Preferences/ws.hbang.Terminal",
+        "/var/mobile/Library/Preferences/xyz.willy.Zebra",
     };
     char* validKeys[] = {
         "Label",
@@ -637,6 +652,42 @@ void detect_cfprefsd_hook()
         "RunAtLoad",
         "KeepAlive",
         "Disabled",
+        
+        "additionalExecutables",
+        "appSettings",
+        
+        "keychainVersion",
+        "expandContainersShortcutEnabled",
+        "launchApplicationOnContainerSelectionEnabled",
+        "onlyShowIfContainersExistEnabled",
+        
+        "ActiveMenuItems",
+        "CustomCornerRadiusEnabled",
+        
+        "FavoritedLinks",
+        "FavoritesVersion",
+        
+        "AutoRefreshSources",
+        "CanisterIngest",
+        "CanisterUpdateDate",
+        "InstallSortType",
+        "ShowIgnoredUpdates",
+        
+        "Mode4SortColumn",
+        "Mode4SortDescending",
+        "ProcInfoMode",
+        
+        "keyboardArrowsStyle",
+        "refreshRateOnAC",
+        "refreshRateOnBattery",
+        
+        "AlwaysInstallLatest",
+        "FeaturedPackagesType",
+        "FilterIncompatibleArchitectures",
+        "FinishAutomatically",
+        "PackageSortingType",
+        "WantsFeaturedPackages",
+        
     };
     for(int i=0; i<sizeof(jbplists)/sizeof(jbplists[0]); i++) {
         NSUserDefaults* defaults = [[NSUserDefaults alloc] initWithSuiteName:@(jbplists[i])];
@@ -644,7 +695,7 @@ void detect_cfprefsd_hook()
         for(int j=0; j<sizeof(validKeys)/sizeof(validKeys[0]); j++) {
             id value = [defaults valueForKey:@(validKeys[j])];
             if(value) {
-                LOG("cfprefsd hook detected: %s\n", jbplists[i]);
+                LOG("cfprefsd hook detected jbroot:%s.plist\n", jbplists[i]);
                 break;
             }
         }
@@ -686,8 +737,8 @@ void detect_cfprefsd_hook()
             detect_passcode_status();
             detect_removed_varjb();
             detect_url_schemes();
-            detect_jbapp_plugins();
             detect_cfprefsd_hook();
+            detect_jbapp_plugins();
         });
     }
 }
