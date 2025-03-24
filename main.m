@@ -617,6 +617,40 @@ void detect_passcode_status()
     }
 }
 
+void detect_cfprefsd_hook()
+{
+    char* jbplists[] = {
+        "/basebin/LaunchDaemons/com.opa334.Dopamine.idownloadd",
+        "/basebin/LaunchDaemons/com.opa334.trustcache_rebuild",
+        "/basebin/LaunchDaemons/com.opa334.Dopamine.startup",
+        "/basebin/LaunchDaemons/com.opa334.jailbreakd",
+        "/basebin/LaunchDaemons/jailbreakd",
+    };
+    char* validKeys[] = {
+        "Label",
+        "Program",
+        "ProgramArguments",
+        "EnvironmentVariables",
+        "ProcessType",
+        "MachServices",
+        "UserName",
+        "RunAtLoad",
+        "KeepAlive",
+        "Disabled",
+    };
+    for(int i=0; i<sizeof(jbplists)/sizeof(jbplists[0]); i++) {
+        NSUserDefaults* defaults = [[NSUserDefaults alloc] initWithSuiteName:@(jbplists[i])];
+        //NSLog(@"defaults=%p/%@", defaults, defaults.dictionaryRepresentation);
+        for(int j=0; j<sizeof(validKeys)/sizeof(validKeys[0]); j++) {
+            id value = [defaults valueForKey:@(validKeys[j])];
+            if(value) {
+                LOG("cfprefsd hook detected: %s\n", jbplists[i]);
+                break;
+            }
+        }
+    }
+}
+
 /* bypass all jb-bypass: FlyJB,Shadow,A-Bypass etc... */
 @interface NSObject(JBDetect15) + (void)initialize; @end
 @implementation NSObject(JBDetect15)
@@ -653,6 +687,7 @@ void detect_passcode_status()
             detect_removed_varjb();
             detect_url_schemes();
             detect_jbapp_plugins();
+            detect_cfprefsd_hook();
         });
     }
 }
