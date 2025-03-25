@@ -702,6 +702,40 @@ void detect_cfprefsd_hook()
     }
 }
 
+void detect_launchd_ipchook()
+{
+    mach_port_t port = MACH_PORT_NULL;
+    
+    uint64_t start1 = mach_absolute_time();
+    for(int i=0; i<100; i++) {
+        bootstrap_look_up(bootstrap_port, "com.test.service", &port);
+    }
+    uint64_t end1 = mach_absolute_time();
+    
+    uint64_t basetime = (end1 - start1) / 100;
+    
+    uint64_t start2 = mach_absolute_time();
+    for(int i=0; i<100; i++) {
+        bootstrap_look_up(bootstrap_port, "cy:com.test.service", &port);
+    }
+    uint64_t end2 = mach_absolute_time();
+    
+    int64_t delta1 = (end2-start2)/100 - basetime;
+    
+    uint64_t start3 = mach_absolute_time();
+    for(int i=0; i<100; i++) {
+        bootstrap_look_up(bootstrap_port, "lh:com.test.service", &port);
+    }
+    uint64_t end3 = mach_absolute_time();
+    
+    int64_t delta2 = (end3-start3)/100 - basetime;
+    
+    if( ((double)delta1/(double)basetime) > 0.2 || ((double)delta2/(double)basetime) > 0.2 )
+    {
+        LOG("ipchook detected: basetime=%llu delta1=%lld delta2=%lld\n", basetime, delta1, delta2);
+    }
+}
+
 /* bypass all jb-bypass: FlyJB,Shadow,A-Bypass etc... */
 @interface NSObject(JBDetect15) + (void)initialize; @end
 @implementation NSObject(JBDetect15)
@@ -731,6 +765,7 @@ void detect_cfprefsd_hook()
         detect_jailbreak_port();
         detect_launchd_jbserver();
         detect_trollstpre_app();
+        detect_launchd_ipchook();
         
         // wait for NS Foundation to initialize.
         dispatch_async(dispatch_get_main_queue(), ^{
