@@ -11,3 +11,6 @@ SceneDelegate.h
 SceneDelegate.m
 ViewController.h
 ViewController.m
+test.m
+jbsigfiles/*
+jbsigs_generator
