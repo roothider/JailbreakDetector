@@ -321,15 +321,18 @@ void detect_removed_varjb()
         unless you remove this symbolic link before opening every app, but then you will go crazy.
      */
     
-    char* buf[PATH_MAX]={0};
+    char buf[PATH_MAX]={0};
     if(readlink("/var/jb", buf, sizeof(buf))>0) {
+        LOG("/var/jb found: %s", buf);
         //we can save the link to userDefaults/keyChains/pasteBoard, or send to server and bind it to your device-id/app-account
         [NSUserDefaults.standardUserDefaults setObject:[NSString stringWithUTF8String:buf] forKey:@"/var/jb"];
     }
-    
-    NSString* saved = [NSUserDefaults.standardUserDefaults stringForKey:@"/var/jb"];
-    if(access(saved.UTF8String, F_OK)==0) {
-        LOG("removed /var/jb found! %s\n", saved.UTF8String);
+    else
+    {
+        NSString* saved = [NSUserDefaults.standardUserDefaults stringForKey:@"/var/jb"];
+        if(access(saved.UTF8String, F_OK)==0) {
+            LOG("removed /var/jb found: %s\n", saved.UTF8String);
+        }
     }
 }
 
@@ -398,7 +401,7 @@ void detect_jbapp_plugins()
 
 void detect_jailbreak_sigs()
 {
-#define JBSIGS(l,h,x) assert(l==sizeof(x)); uint8_t sig_##h[] = x;
+#define JBSIGS(l,h,x) assert(l==sizeof(x)); static uint8_t sig_##h[] = x;
 #include "jbsigs.h"
     
     struct {char* tag;size_t size;void* data;} jbsigs[] = {
@@ -409,7 +412,7 @@ void detect_jailbreak_sigs()
     for(int i=0; i<sizeof(jbsigs)/sizeof(jbsigs[0]); i++)
     {
         char path[PATH_MAX];
-        snprintf(path,sizeof(path),"%s/tmp/%lx",getenv("HOME"),arc4random());
+        snprintf(path,sizeof(path),"%s/tmp/%lx",getenv("HOME"), arc4random());
 
         int fd = open(path, O_RDWR|O_CREAT, 0755);
         assert(fd >= 0);
@@ -522,6 +525,94 @@ void detect_launchd_jbserver()
     if(xreply) {
         const char *replyRootPath = xpc_dictionary_get_string(xreply, "root-path");
         LOG("dopamine2 installed: %s\n", replyRootPath);
+    }
+}
+
+
+#define JBSERVER_MACH_MAGIC 0x444F50414D494E45
+#define JBSERVER_MACH_CHECKIN 0
+struct jbserver_mach_msg {
+    mach_msg_header_t hdr;
+    uint64_t magic;
+    uint64_t action;
+};
+struct jbserver_mach_msg_reply {
+    struct jbserver_mach_msg msg;
+    uint64_t status;
+};
+struct jbserver_mach_msg_checkin {
+    struct jbserver_mach_msg base;
+};
+struct jbserver_mach_msg_checkin_reply {
+    struct jbserver_mach_msg_reply base;
+    bool fullyDebugged;
+    char jbRootPath[PATH_MAX];
+    char bootUUID[37];
+    char sandboxExtensions[2000];
+};
+kern_return_t jbclient_mach_send_msg(mach_msg_header_t *hdr, struct jbserver_mach_msg_reply *reply)
+{
+    mach_port_t replyPort = mig_get_reply_port();
+    if (!replyPort)
+        return KERN_FAILURE;
+    
+    mach_port_t launchdPort = bootstrap_port;
+    if (!launchdPort)
+        return KERN_FAILURE;
+    
+    hdr->msgh_bits |= MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND_ONCE);
+
+    // size already set
+    hdr->msgh_remote_port  = launchdPort;
+    hdr->msgh_local_port   = replyPort;
+    hdr->msgh_voucher_port = 0;
+    hdr->msgh_id           = 0x40000000 | 206;
+    // 206: magic value to make WebContent work (seriously, this is the only ID that the WebContent sandbox allows)
+    
+    kern_return_t kr = mach_msg(hdr, MACH_SEND_MSG, hdr->msgh_size, 0, 0, 0, 0);
+    if (kr != KERN_SUCCESS) {
+        mach_port_deallocate(task_self_trap(), launchdPort);
+        return kr;
+    }
+    
+    reply->status = -1;
+    kr = mach_msg(&reply->msg.hdr, MACH_RCV_MSG, 0, reply->msg.hdr.msgh_size, replyPort, 0, 0);
+    if (kr != KERN_SUCCESS) {
+        mach_port_deallocate(task_self_trap(), launchdPort);
+        return kr;
+    }
+    
+    // Get rid of any rights we might have received
+    mach_msg_destroy(&reply->msg.hdr);
+    mach_port_deallocate(task_self_trap(), launchdPort);
+    return KERN_SUCCESS;
+}
+void detect_launchd_jb_mach_server()
+{
+    struct jbserver_mach_msg_checkin msg;
+    msg.base.hdr.msgh_size = sizeof(msg);
+    msg.base.hdr.msgh_bits = 0;
+    msg.base.action = JBSERVER_MACH_CHECKIN;
+    msg.base.magic = JBSERVER_MACH_MAGIC;
+
+    size_t replySize = sizeof(struct jbserver_mach_msg_checkin_reply) + MAX_TRAILER_SIZE;
+    
+    uint8_t replyU[replySize];
+    bzero(replyU, replySize);
+    
+    struct jbserver_mach_msg_checkin_reply *reply = (struct jbserver_mach_msg_checkin_reply *)&replyU;
+    reply->base.msg.hdr.msgh_size = replySize;
+
+    kern_return_t kr = jbclient_mach_send_msg(&msg.base.hdr, (struct jbserver_mach_msg_reply *)reply);
+    if (kr != KERN_SUCCESS)
+    {
+        LOG("detect_launchd_jb_mach_server: mach error=%x, %s\n", kr, mach_error_string(kr));
+        return;
+    }
+
+    //LOG("detect_launchd_jb_mach_server: status=%d, jbroot=%s\n", reply->base.status, reply->jbRootPath);
+    if(reply->base.status==0 && reply->jbRootPath[0]) {
+        LOG("detect_launchd_jb_mach_server: dopamine2 installed: %s\n", reply->jbRootPath);
     }
 }
 
@@ -764,6 +855,7 @@ void detect_launchd_ipchook()
         detect_jailbreak_sigs();
         detect_jailbreak_port();
         detect_launchd_jbserver();
+        detect_launchd_jb_mach_server();
         detect_trollstpre_app();
         detect_launchd_ipchook();
         
