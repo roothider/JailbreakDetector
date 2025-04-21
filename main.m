@@ -448,7 +448,7 @@ void detect_jailbreak_port()
         if(kr==0 || kr==1102) {
             LOG("jailbreak port %s found!\n", ports[i]);
         } else if(kr==1100) {
-            LOG("jailbreak port %s not found.\n", ports[i]);
+            //LOG("jailbreak port %s not found.\n", ports[i]);
         } else {
             LOG("jailbreak port %s unknown err: %s,%s\n", ports[i], kr, mach_error_string(kr));
         }
@@ -516,7 +516,7 @@ void detect_launchd_jbserver()
     xpc_object_t xreply = NULL;
 
     int err = xpc_pipe_routine_with_flags(xpipe, xdict, &xreply, 0);
-    LOG("xpc_pipe_routine_with_flags error=%d xreply=%p\n", err, xreply);
+    //LOG("xpc_pipe_routine_with_flags error=%d xreply=%p\n", err, xreply);
 
     if (err != 0) {
         return;

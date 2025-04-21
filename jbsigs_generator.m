@@ -119,28 +119,41 @@ void writeMachOFileSig(NSString* path)
     static int index=1;
     static FILE* outfp = NULL;
     static FILE* sigfp = NULL;
+    static NSMutableSet* jbsigs = nil;
     
-    if(!outfp) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        jbsigs = [NSMutableSet new];
+        
+        [NSFileManager.defaultManager removeItemAtPath:@"jbsigs" error:nil];
+        
         mkdir("jbsigs", 0755);
+        
         outfp = fopen("jbsigs.h", "w+");
         fprintf(outfp, "#include \"jbsigs/jbsigs-%d.h\"\n", index);
-    }
+    });
     
     __block NSMutableString* result = [NSMutableString new];
     LOG("file: %s\n", path.fileSystemRepresentation);
     processMachO(path.fileSystemRepresentation, ^(int fd,uint64_t offset,size_t size, void* header) {
         gSilces++;
         findCodeSignature(header, ^(void* data, size_t size) {
-            gCodeSigns++;
-            gCodeSignBytes+=size;
-            
-            uint8_t cdhash[20];
+            uint8_t cdhash[20]={0};
             CC_SHA1(data, (CC_LONG)size, cdhash);
             char hashstr[sizeof(cdhash)*2 + 1] = {0};
             for(int i=0; i<sizeof(cdhash)/sizeof(cdhash[0]); i++) {
                 sprintf(hashstr+i*2, "%02x", cdhash[i]);
             }
             LOG("\tslice(%llx) hash: %s\n", offset, hashstr);
+            
+            if([jbsigs containsObject:@(hashstr)]) {
+                LOG("hash already added, skip!\n");
+                return;
+            }
+            [jbsigs addObject:@(hashstr)];
+            
+            gCodeSigns++;
+            gCodeSignBytes+=size;
             
             if((gCodeSignBytes/index) > (1*1024*1024))
             {
@@ -188,7 +201,10 @@ int realmain(int argc, char * argv[])
         gDesc = YES;
     }
     
-    [NSFileManager.defaultManager removeItemAtPath:@"jbsigs" error:nil];
+    if(access(argv[1], F_OK) != 0) {
+        LOG("invalid dir path: %s\n", argv[1]);
+        return -1;
+    }
     
     NSDirectoryEnumerator<NSURL *> *directoryEnumerator = [[NSFileManager defaultManager] enumeratorAtURL:[NSURL fileURLWithPath:@(argv[1]) isDirectory:YES] includingPropertiesForKeys:nil options:0 errorHandler:nil];
     for(NSURL* file in directoryEnumerator) {
