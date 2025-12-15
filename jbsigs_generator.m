@@ -138,11 +138,11 @@ void writeMachOFileSig(NSString* path)
     processMachO(path.fileSystemRepresentation, ^(int fd,uint64_t offset,size_t size, void* header) {
         gSilces++;
         findCodeSignature(header, ^(void* data, size_t size) {
-            uint8_t cdhash[20]={0};
-            CC_SHA1(data, (CC_LONG)size, cdhash);
-            char hashstr[sizeof(cdhash)*2 + 1] = {0};
-            for(int i=0; i<sizeof(cdhash)/sizeof(cdhash[0]); i++) {
-                sprintf(hashstr+i*2, "%02x", cdhash[i]);
+            uint8_t hash[CC_SHA1_DIGEST_LENGTH]={0};
+            CC_SHA1(data, (CC_LONG)size, hash);
+            char hashstr[sizeof(hash)*2 + 1] = {0};
+            for(int i=0; i<sizeof(hash)/sizeof(hash[0]); i++) {
+                sprintf(hashstr+i*2, "%02x", hash[i]);
             }
             LOG("\tslice(%llx) hash: %s\n", offset, hashstr);
             

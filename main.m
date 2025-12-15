@@ -231,7 +231,7 @@ void detect_exception_port()
     
     for (int i = 0; i<count; i++)
     {
-        //NSLog(@"index[%d] mask=%08X port=%08X behavior=%08X flavor=%08X\n", i, masks[i], ports[i], behaviors[i], flavors[i]);
+        //NSLog(@"detect_exception_port: index[%d] mask=%08X port=%08X behavior=%08X flavor=%08X\n", i, masks[i], ports[i], behaviors[i], flavors[i]);
         if(ports[i] || behaviors[i] || flavors[i]) {
             LOG("unexept exception record [%d] mask=%08X port=%08X behavior=%08X flavor=%08X\n", i, masks[i], ports[i], behaviors[i], flavors[i]);
         }
@@ -257,7 +257,12 @@ void detect_jb_preboot()
         strncpy(boothash, s.f_mntfromname+prefixlen, p-(s.f_mntfromname+prefixlen));
         
         char path[PATH_MAX];
-        snprintf(path, sizeof(path), "/private/preboot/%s/procursus", s.f_mntfromname);
+        snprintf(path, sizeof(path), "/private/preboot/%s/procursus", boothash);
+        if(access(path, F_OK)==0) {
+            LOG("jb files in preboot!\n");
+        }
+        
+        snprintf(path, sizeof(path), "/private/preboot/%s/jb", boothash);
         if(access(path, F_OK)==0) {
             LOG("jb files in preboot!\n");
         }
@@ -331,7 +336,7 @@ void detect_removed_varjb()
     {
         NSString* saved = [NSUserDefaults.standardUserDefaults stringForKey:@"/var/jb"];
         if(access(saved.UTF8String, F_OK)==0) {
-            LOG("removed /var/jb found: %s\n", saved.UTF8String);
+            LOG("removed /var/jb found:\n%s\n\n", saved.UTF8String);
         }
     }
 }
@@ -481,32 +486,7 @@ extern void* _os_alloc_once(struct _os_alloc_once_s *slot, size_t sz, os_functio
 
 void detect_launchd_jbserver()
 {
-    struct xpc_global_data* globalData = NULL;
-    if (_os_alloc_once_table[1].once == -1) {
-        globalData = _os_alloc_once_table[1].ptr;
-    }
-    else {
-        globalData = _os_alloc_once(&_os_alloc_once_table[1], 472, NULL);
-        if (!globalData) _os_alloc_once_table[1].once = -1;
-    }
-    if (!globalData) {
-        LOG("invalid globalData!\n");
-        return;
-    }
-    
-    if (!globalData->xpc_bootstrap_pipe) {
-        mach_port_t *initPorts;
-        mach_msg_type_number_t initPortsCount = 0;
-        if (mach_ports_lookup(mach_task_self(), &initPorts, &initPortsCount) == 0) {
-            globalData->task_bootstrap_port = initPorts[0];
-            globalData->xpc_bootstrap_pipe = xpc_pipe_create_from_port(globalData->task_bootstrap_port, 0);
-        }
-    }
-    if (!globalData->xpc_bootstrap_pipe) {
-        LOG("invalid xpc_bootstrap_pipe!\n");
-        return;
-    }
-    xpc_object_t xpipe = globalData->xpc_bootstrap_pipe;
+    xpc_object_t bootstrap_pipe = ((struct xpc_global_data *)_os_alloc_once_table[1].ptr)->xpc_bootstrap_pipe;
 
     xpc_object_t xdict = xpc_dictionary_create_empty();
 
@@ -515,7 +495,7 @@ void detect_launchd_jbserver()
         
     xpc_object_t xreply = NULL;
 
-    int err = xpc_pipe_routine_with_flags(xpipe, xdict, &xreply, 0);
+    int err = xpc_pipe_routine_with_flags(bootstrap_pipe, xdict, &xreply, 0);
     //LOG("xpc_pipe_routine_with_flags error=%d xreply=%p\n", err, xreply);
 
     if (err != 0) {
@@ -615,25 +595,6 @@ void detect_launchd_jb_mach_server()
         LOG("detect_launchd_jb_mach_server: dopamine2 installed: %s\n", reply->jbRootPath);
     }
 }
-
-//works on ios14.0 ~ 15.1.1
-void detect_trollstpre_app()
-{
-    xpc_connection_t connection = xpc_connection_create_mach_service("com.apple.nehelper", nil, 2);
-    xpc_connection_set_event_handler(connection, ^(xpc_object_t object){});
-    xpc_connection_resume(connection);
-    xpc_object_t xdict = xpc_dictionary_create(nil, nil, 0);
-    xpc_dictionary_set_uint64(xdict, "delegate-class-id", 1);
-    xpc_dictionary_set_uint64(xdict, "cache-command", 3);
-    xpc_dictionary_set_string(xdict, "cache-signing-identifier", "com.opa334.TrollStore");
-    xpc_object_t reply = xpc_connection_send_message_with_reply_sync(connection, xdict);
-//    NSLog(@"reply=%s", xpc_copy_description(reply));
-    xpc_object_t resultData = xpc_dictionary_get_value(reply, "result-data");
-    if(xpc_dictionary_get_value(resultData, "cache-app-uuid") != nil) {
-        LOG("trollstore app installed!\n");
-    }
-}
-
 
 #import <Security/Security.h>
 #import <LocalAuthentication/LocalAuthentication.h>
@@ -827,6 +788,51 @@ void detect_launchd_ipchook()
     }
 }
 
+void detect_bind_mounts()
+{
+    char* defaultBindMounts[] = {
+        "/usr/standalone/firmware",
+        "/System/Library/Pearl/ReferenceFrames",
+        "/System/Library/Caches/com.apple.factorydata",
+    };
+    
+    struct statfs * ss=NULL;
+    int n = getmntinfo(&ss, 0);
+    for(int i=0; i<n; i++) {
+        //LOG("mount %s %s : %s : %x,%x\n", ss[i].f_fstypename, ss[i].f_mntonname, ss[i].f_mntfromname, ss[i].f_flags, ss[i].f_flags_ext);
+        if(strcmp(ss[i].f_fstypename,"bindfs")==0) {
+            bool known=false;
+            for(int j=0; j<sizeof(defaultBindMounts)/sizeof(defaultBindMounts[0]); j++) {
+                if(strcmp(ss[i].f_mntonname, defaultBindMounts[j])==0) {
+                    known = true;
+                    break;
+                }
+            }
+            if(!known)
+            {
+                LOG("unknown bind mount found: %s : %s\n", ss[i].f_mntonname, ss[i].f_mntfromname);
+            }
+        }
+    }
+}
+
+void detect_launchd_deplatformized()
+{
+    xpc_object_t bootstrap_pipe = ((struct xpc_global_data *)_os_alloc_once_table[1].ptr)->xpc_bootstrap_pipe;
+
+    xpc_object_t dict = xpc_dictionary_create(NULL, NULL, 0);
+    xpc_dictionary_set_uint64(dict, "subsystem", 3);
+    xpc_dictionary_set_uint64(dict, "routine", 815);
+    xpc_dictionary_set_uint64(dict, "handle", 0);
+    xpc_dictionary_set_uint64(dict, "type", 1);
+
+    xpc_object_t reply = NULL;
+    int rc = xpc_pipe_routine(bootstrap_pipe, dict, &reply);
+    if(rc != 154) {
+        LOG("launchd deplatformized: %s\n", xpc_copy_description(reply));
+    }
+}
+
 /* bypass all jb-bypass: FlyJB,Shadow,A-Bypass etc... */
 @interface NSObject(JBDetect15) + (void)initialize; @end
 @implementation NSObject(JBDetect15)
@@ -854,10 +860,11 @@ void detect_launchd_ipchook()
         detect_fugu15Max();
         detect_jailbreak_sigs();
         detect_jailbreak_port();
+        detect_launchd_ipchook();
         detect_launchd_jbserver();
         detect_launchd_jb_mach_server();
-        detect_trollstpre_app();
-        detect_launchd_ipchook();
+        detect_launchd_deplatformized();
+        detect_bind_mounts();
         
         // wait for NS Foundation to initialize.
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -865,7 +872,9 @@ void detect_launchd_ipchook()
             detect_removed_varjb();
             detect_url_schemes();
             detect_cfprefsd_hook();
-            detect_jbapp_plugins();
+            dispatch_async(dispatch_get_main_queue(), ^{
+                detect_jbapp_plugins(); //super slow
+            });
         });
     }
 }
