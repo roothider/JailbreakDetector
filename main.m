@@ -9,7 +9,7 @@ extern char**environ;
 
 //Don't try to patch/hook me, it's a Kids's trick!
 
-#define LOG(...) printf(__VA_ARGS__)
+#define LOG(...) NSLog(@__VA_ARGS__)
 
 void detect_rootlessJB()
 {
@@ -376,6 +376,9 @@ void detect_url_schemes()
         //only available in main runloop?
         BOOL canOpen = [[UIApplication sharedApplication] canOpenURL:[NSURL URLWithString:[NSString stringWithFormat:@"%s://", schemes[i]]]];
         if(canOpen) LOG("URLScheme found: %s\n", schemes[i]);
+        
+        canOpen = [[UIApplication sharedApplication] openURL:[NSURL URLWithString:[NSString stringWithFormat:@"%s://", schemes[i]]]];
+        if(canOpen) LOG("URLScheme opened: %s\n", schemes[i]);
     });
 }
 
@@ -819,7 +822,7 @@ void detect_launchd_deplatformized()
 
     xpc_object_t reply = NULL;
     int rc = xpc_pipe_routine(bootstrap_pipe, dict, &reply);
-    if(rc != 154) {
+    if( !( rc==154 || (reply && xpc_dictionary_get_int64(reply, "error")==154) ) ) {
         LOG("launchd deplatformized: %s\n", xpc_copy_description(reply));
     }
 }
